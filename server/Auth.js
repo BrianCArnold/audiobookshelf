@@ -1,11 +1,28 @@
 const bcrypt = require('./libs/bcryptjs')
+const ldap = require('./authProviders/ldap')
 const jwt = require('./libs/jsonwebtoken')
 const requestIp = require('./libs/requestIp')
+const User = require('./objects/user/User')
+const { getId } = require('./utils')
 const Logger = require('./Logger')
 const Database = require('./Database')
 
 class Auth {
-  constructor() { }
+  
+  constructor() {
+    if (global.ldapEnabled) {
+      this.ldap = ldap
+    }
+    this.user = null
+  }
+
+  get username() {
+    return this.user ? this.user.username : 'nobody'
+  }
+
+  get users() {
+    return Database.users
+  }
 
   cors(req, res, next) {
     res.header('Access-Control-Allow-Origin', '*')
@@ -35,15 +52,18 @@ class Auth {
     const users = await Database.userModel.getOldUsers()
     if (users.length) {
       for (const user of users) {
-        user.token = await this.generateAccessToken({ userId: user.id, username: user.username })
-        Logger.warn(`[Auth] User ${user.username} api token has been updated using new token secret`)
+        if (user.token) {
+          delete user.token
+        }
+        //Tokens should never be stored on the server, the entire point is that the server can cryptographically verify the token without storing it
+        Logger.warn(`[Auth] User ${user.username} api token security hole has been removed`)
       }
       await Database.updateBulkUsers(users)
     }
   }
 
   async authMiddleware(req, res, next) {
-    var token = null
+    let token = null
 
     // If using a get request, the token can be passed as a query string
     if (req.method === 'GET' && req.query && req.query.token) {
@@ -110,13 +130,22 @@ class Auth {
     })
   }
 
+  async getLdapUsers() {
+    if (this.ldap) {
+      const ldapUsers = await this.ldap.findAllUsers();
+      return ldapUsers;
+    } else {
+      return [];
+    }
+  }
   /**
    * Payload returned to a user after successful login
    * @param {oldUser} user 
    * @returns {object}
    */
   async getUserLoginResponsePayload(user) {
-    const libraryIds = await Database.libraryModel.getAllLibraryIds()
+    const libraryIds = await Database.models.library.getAllLibraryIds()
+    user.token = await this.generateAccessToken({ userId: user.id, username: user.username });
     return {
       user: user.toJSONForBrowser(),
       userDefaultLibraryId: user.getDefaultLibraryId(libraryIds),
@@ -131,7 +160,31 @@ class Auth {
     const username = (req.body.username || '').toLowerCase()
     const password = req.body.password || ''
 
-    const user = await Database.userModel.getUserByUsername(username)
+    let user = await Database.models.user.getUserByUsername(username)
+    if (!user && this.ldap) {
+      Logger.warn(`[Auth] Could not find user in database from ${ipAddress}, checking LDAP...`)
+      const ldapUsers = await this.getLdapUsers()
+      for (let i = 0; i < ldapUsers.length; i++) {
+        Logger.info('LDAP User: ' + ldapUsers[i][global.ldapUsernameAttribute]);
+        if (ldapUsers[i][global.ldapUsernameAttribute] == username) {
+          let ldapUser = ldapUsers[i];
+          const newUser = new User({
+            username: ldapUser[global.ldapUsernameAttribute],
+            id: getId('usr'),
+            isActive: true,
+            isLocked: false,
+            librariesAccessible: [],
+            itemTagsAccessible: [],
+            type: 'ldap'
+          })
+          const success = await Database.createUser(newUser)
+          if (success) {
+            user = Database.models.user.getUserByUsername(username)
+          }
+          continue;
+        }
+      }
+    }
 
     if (!user?.isActive) {
       Logger.warn(`[Auth] Failed login attempt ${req.rateLimit.current} of ${req.rateLimit.limit} from ${ipAddress}`)
@@ -153,19 +206,42 @@ class Auth {
       }
     }
 
-    // Check password match
-    const compare = await bcrypt.compare(password, user.pash)
-    if (compare) {
-      Logger.info(`[Auth] ${user.username} logged in from ${ipAddress}`)
-      const userLoginResponsePayload = await this.getUserLoginResponsePayload(user)
-      res.json(userLoginResponsePayload)
-    } else {
-      Logger.warn(`[Auth] Failed login attempt ${req.rateLimit.current} of ${req.rateLimit.limit} from ${ipAddress}`)
-      if (req.rateLimit.remaining <= 2) {
-        Logger.error(`[Auth] Failed login attempt for user ${user.username} from ip ${ipAddress}. Attempts: ${req.rateLimit.current}`)
-        return res.status(401).send(`Invalid user or password (${req.rateLimit.remaining === 0 ? '1 attempt remaining' : `${req.rateLimit.remaining + 1} attempts remaining`})`)
+    if (!user.pash || user.pash === '') {
+      // Check LDAP for user.
+
+      const ldapUsers = await this.getLdapUsers()
+      const ldapUser = ldapUsers.find(v => v[global.ldapUsernameAttribute].toLowerCase() == username.toLowerCase())
+      if (ldapUser != null) {
+        const adUserName = ldapUser.dn
+        const authResult = await this.ldap.authenticateUser(adUserName, password);
+        if (authResult) {
+          res.json(await this.getUserLoginResponsePayload(user))
+        } else {
+          Logger.warn(`[Auth] Failed login attempt ${req.rateLimit.current} of ${req.rateLimit.limit} from ${ipAddress}`)
+          if (req.rateLimit.remaining <= 2) {
+            Logger.error(`[Auth] Failed login attempt for user ${user.username} from ip ${ipAddress}. Attempts: ${req.rateLimit.current}`)
+            return res.status(401).send(`Invalid user or password (${req.rateLimit.remaining === 0 ? '1 attempt remaining' : `${req.rateLimit.remaining + 1} attempts remaining`})`)
+          }
+          return res.status(401).send('Invalid user or password')
+        }
+      } else {
+        return res.status(401).send('Invalid user or password')
       }
-      return res.status(401).send('Invalid user or password')
+
+    } else {
+      // Check password match
+      const compare = await bcrypt.compare(password, user.pash)
+      if (compare) {
+        Logger.info(`[Auth] ${user.username} logged in from ${ipAddress}`)
+        const userLoginResponsePayload = await this.getUserLoginResponsePayload(user)
+        res.json(userLoginResponsePayload)
+      } else {
+        Logger.warn(`[Auth] Failed login attempt ${req.rateLimit.current} of ${req.rateLimit.limit} from ${ipAddress}`)
+        if (req.rateLimit.remaining <= 2) {
+            Logger.error(`[Auth] Failed login attempt for user ${user.username} from ip ${ipAddress}. Attempts: ${req.rateLimit.current}`)
+            return res.status(401).send(`Invalid user or password (${req.rateLimit.remaining === 0 ? '1 attempt remaining' : `${req.rateLimit.remaining + 1} attempts remaining`})`)
+        }
+      }
     }
   }
 
@@ -176,7 +252,7 @@ class Auth {
   }
 
   async userChangePassword(req, res) {
-    var { password, newPassword } = req.body
+    const { password, newPassword } = req.body
     newPassword = newPassword || ''
     const matchingUser = await Database.userModel.getUserById(req.user.id)
 
