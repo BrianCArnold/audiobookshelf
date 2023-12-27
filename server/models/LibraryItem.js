@@ -506,162 +506,192 @@ class LibraryItem extends Model {
    */
   static async getPersonalizedShelves(library, user, include, limit) {
     const fullStart = Date.now() // Used for testing load times
-
-    const shelves = []
-
-    // "Continue Listening" shelf
-    const itemsInProgressPayload = await libraryFilters.getMediaItemsInProgress(library, user, include, limit, false)
-    if (itemsInProgressPayload.items.length) {
-      const ebookOnlyItemsInProgress = itemsInProgressPayload.items.filter(li => li.media.isEBookOnly)
-      const audioOnlyItemsInProgress = itemsInProgressPayload.items.filter(li => !li.media.isEBookOnly)
-
-      shelves.push({
-        id: 'continue-listening',
-        label: 'Continue Listening',
-        labelStringKey: 'LabelContinueListening',
-        type: library.isPodcast ? 'episode' : 'book',
-        entities: audioOnlyItemsInProgress,
-        total: itemsInProgressPayload.count
-      })
-
-      if (ebookOnlyItemsInProgress.length) {
-        // "Continue Reading" shelf
-        shelves.push({
-          id: 'continue-reading',
-          label: 'Continue Reading',
-          labelStringKey: 'LabelContinueReading',
-          type: 'book',
-          entities: ebookOnlyItemsInProgress,
+    const promises = [];
+    const shelves = [];
+    promises.push((async () => {
+      const itemsInProgressPayload = await libraryFilters.getMediaItemsInProgress(library, user, include, limit, false)
+      const result = [];
+      if (itemsInProgressPayload.items.length) {
+        const ebookOnlyItemsInProgress = itemsInProgressPayload.items.filter(li => li.media.isEBookOnly)
+        const audioOnlyItemsInProgress = itemsInProgressPayload.items.filter(li => !li.media.isEBookOnly)
+        result.push({
+          id: 'continue-listening',
+          label: 'Continue Listening',
+          labelStringKey: 'LabelContinueListening',
+          type: library.isPodcast ? 'episode' : 'book',
+          entities: audioOnlyItemsInProgress,
           total: itemsInProgressPayload.count
-        })
-      }
-    }
-    Logger.dev(`Loaded ${itemsInProgressPayload.items.length} of ${itemsInProgressPayload.count} items for "Continue Listening/Reading" in ${((Date.now() - fullStart) / 1000).toFixed(2)}s`)
+        });
 
-    let start = Date.now()
-    if (library.isBook) {
-      start = Date.now()
-      // "Continue Series" shelf
-      const continueSeriesPayload = await libraryFilters.getLibraryItemsContinueSeries(library, user, include, limit)
-      if (continueSeriesPayload.libraryItems.length) {
-        shelves.push({
-          id: 'continue-series',
-          label: 'Continue Series',
-          labelStringKey: 'LabelContinueSeries',
-          type: 'book',
-          entities: continueSeriesPayload.libraryItems,
-          total: continueSeriesPayload.count
-        })
+        if (ebookOnlyItemsInProgress.length) {
+          // "Continue Reading" shelf
+          result.push({
+            id: 'continue-reading',
+            label: 'Continue Reading',
+            labelStringKey: 'LabelContinueReading',
+            type: 'book',
+            entities: ebookOnlyItemsInProgress,
+            total: itemsInProgressPayload.count
+          });
+        }
       }
-      Logger.dev(`Loaded ${continueSeriesPayload.libraryItems.length} of ${continueSeriesPayload.count} items for "Continue Series" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
-    } else if (library.isPodcast) {
-      // "Newest Episodes" shelf
-      const newestEpisodesPayload = await libraryFilters.getNewestPodcastEpisodes(library, user, limit)
-      if (newestEpisodesPayload.libraryItems.length) {
-        shelves.push({
-          id: 'newest-episodes',
-          label: 'Newest Episodes',
-          labelStringKey: 'LabelNewestEpisodes',
-          type: 'episode',
-          entities: newestEpisodesPayload.libraryItems,
-          total: newestEpisodesPayload.count
-        })
+      Logger.info(`Loaded ${itemsInProgressPayload.items.length} of ${itemsInProgressPayload.count} items for "Continue Listening/Reading" in ${((Date.now() - fullStart) / 1000).toFixed(2)}s`)
+      return result;
+    })());
+    // "Continue Listening" shelf
+    
+    promises.push((async () => {
+      const start = Date.now()
+      const result = [];
+      if (library.isBook) {
+        // "Continue Series" shelf
+        const continueSeriesPayload = await libraryFilters.getLibraryItemsContinueSeries(library, user, include, limit)
+        if (continueSeriesPayload.libraryItems.length) {
+          result.push({
+            id: 'continue-series',
+            label: 'Continue Series',
+            labelStringKey: 'LabelContinueSeries',
+            type: 'book',
+            entities: continueSeriesPayload.libraryItems,
+            total: continueSeriesPayload.count
+          });
+        }
+        Logger.info(`Loaded ${continueSeriesPayload.libraryItems.length} of ${continueSeriesPayload.count} items for "Continue Series" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
+      } else if (library.isPodcast) {
+        // "Newest Episodes" shelf
+        const newestEpisodesPayload = await libraryFilters.getNewestPodcastEpisodes(library, user, limit)
+        if (newestEpisodesPayload.libraryItems.length) {
+          result.push({
+            id: 'newest-episodes',
+            label: 'Newest Episodes',
+            labelStringKey: 'LabelNewestEpisodes',
+            type: 'episode',
+            entities: newestEpisodesPayload.libraryItems,
+            total: newestEpisodesPayload.count
+          });
+        }
+        Logger.info(`Loaded ${newestEpisodesPayload.libraryItems.length} of ${newestEpisodesPayload.count} episodes for "Newest Episodes" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
       }
-      Logger.dev(`Loaded ${newestEpisodesPayload.libraryItems.length} of ${newestEpisodesPayload.count} episodes for "Newest Episodes" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
-    }
-
-    start = Date.now()
-    // "Recently Added" shelf
-    const mostRecentPayload = await libraryFilters.getLibraryItemsMostRecentlyAdded(library, user, include, limit)
-    if (mostRecentPayload.libraryItems.length) {
-      shelves.push({
-        id: 'recently-added',
-        label: 'Recently Added',
-        labelStringKey: 'LabelRecentlyAdded',
-        type: library.mediaType,
-        entities: mostRecentPayload.libraryItems,
-        total: mostRecentPayload.count
-      })
-    }
-    Logger.dev(`Loaded ${mostRecentPayload.libraryItems.length} of ${mostRecentPayload.count} items for "Recently Added" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
-
-    if (library.isBook) {
-      start = Date.now()
-      // "Recent Series" shelf
-      const seriesMostRecentPayload = await libraryFilters.getSeriesMostRecentlyAdded(library, user, include, 5)
-      if (seriesMostRecentPayload.series.length) {
-        shelves.push({
-          id: 'recent-series',
-          label: 'Recent Series',
-          labelStringKey: 'LabelRecentSeries',
-          type: 'series',
-          entities: seriesMostRecentPayload.series,
-          total: seriesMostRecentPayload.count
-        })
-      }
-      Logger.dev(`Loaded ${seriesMostRecentPayload.series.length} of ${seriesMostRecentPayload.count} series for "Recent Series" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
-
-      start = Date.now()
-      // "Discover" shelf
-      const discoverLibraryItemsPayload = await libraryFilters.getLibraryItemsToDiscover(library, user, include, limit)
-      if (discoverLibraryItemsPayload.libraryItems.length) {
-        shelves.push({
-          id: 'discover',
-          label: 'Discover',
-          labelStringKey: 'LabelDiscover',
+      return result;
+    })());
+    promises.push((async () => {
+      const start = Date.now()
+      const result = [];
+      // "Recently Added" shelf
+      const mostRecentPayload = await libraryFilters.getLibraryItemsMostRecentlyAdded(library, user, include, limit)
+      if (mostRecentPayload.libraryItems.length) {
+        result.push({
+          id: 'recently-added',
+          label: 'Recently Added',
+          labelStringKey: 'LabelRecentlyAdded',
           type: library.mediaType,
-          entities: discoverLibraryItemsPayload.libraryItems,
-          total: discoverLibraryItemsPayload.count
+          entities: mostRecentPayload.libraryItems,
+          total: mostRecentPayload.count
         })
       }
-      Logger.dev(`Loaded ${discoverLibraryItemsPayload.libraryItems.length} of ${discoverLibraryItemsPayload.count} items for "Discover" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
+      Logger.info(`Loaded ${mostRecentPayload.libraryItems.length} of ${mostRecentPayload.count} items for "Recently Added" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
+      return result;
+    })());
+    if (library.isBook) {
+      promises.push((async () => {
+        const start = Date.now()
+        const result = [];
+        // "Recent Series" shelf
+        const seriesMostRecentPayload = await libraryFilters.getSeriesMostRecentlyAdded(library, user, include, 5)
+        if (seriesMostRecentPayload.series.length) {
+          result.push({
+            id: 'recent-series',
+            label: 'Recent Series',
+            labelStringKey: 'LabelRecentSeries',
+            type: 'series',
+            entities: seriesMostRecentPayload.series,
+            total: seriesMostRecentPayload.count
+          })
+        }
+        Logger.info(`Loaded ${seriesMostRecentPayload.series.length} of ${seriesMostRecentPayload.count} series for "Recent Series" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
+        return result;
+      })());
+      promises.push((async () => {
+        const start = Date.now()
+        const result = [];
+        // "Discover" shelf
+        const discoverLibraryItemsPayload = await libraryFilters.getLibraryItemsToDiscover(library, user, include, limit)
+        if (discoverLibraryItemsPayload.libraryItems.length) {
+          result.push({
+            id: 'discover',
+            label: 'Discover',
+            labelStringKey: 'LabelDiscover',
+            type: library.mediaType,
+            entities: discoverLibraryItemsPayload.libraryItems,
+            total: discoverLibraryItemsPayload.count
+          })
+        }
+        Logger.info(`Loaded ${discoverLibraryItemsPayload.libraryItems.length} of ${discoverLibraryItemsPayload.count} items for "Discover" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
+        return result;
+      })());
     }
+  
+    promises.push((async () => {
+      const start = Date.now()
+      const result = [];
+      // "Listen Again" shelf
+      const mediaFinishedPayload = await libraryFilters.getMediaFinished(library, user, include, limit)
+      if (mediaFinishedPayload.items.length) {
+        const ebookOnlyItemsInProgress = mediaFinishedPayload.items.filter(li => li.media.isEBookOnly)
+        const audioOnlyItemsInProgress = mediaFinishedPayload.items.filter(li => !li.media.isEBookOnly)
 
-    start = Date.now()
-    // "Listen Again" shelf
-    const mediaFinishedPayload = await libraryFilters.getMediaFinished(library, user, include, limit)
-    if (mediaFinishedPayload.items.length) {
-      const ebookOnlyItemsInProgress = mediaFinishedPayload.items.filter(li => li.media.isEBookOnly)
-      const audioOnlyItemsInProgress = mediaFinishedPayload.items.filter(li => !li.media.isEBookOnly)
-
-      shelves.push({
-        id: 'listen-again',
-        label: 'Listen Again',
-        labelStringKey: 'LabelListenAgain',
-        type: library.isPodcast ? 'episode' : 'book',
-        entities: audioOnlyItemsInProgress,
-        total: mediaFinishedPayload.count
-      })
-
-      // "Read Again" shelf
-      if (ebookOnlyItemsInProgress.length) {
-        shelves.push({
-          id: 'read-again',
-          label: 'Read Again',
-          labelStringKey: 'LabelReadAgain',
-          type: 'book',
-          entities: ebookOnlyItemsInProgress,
+        result.push({
+          id: 'listen-again',
+          label: 'Listen Again',
+          labelStringKey: 'LabelListenAgain',
+          type: library.isPodcast ? 'episode' : 'book',
+          entities: audioOnlyItemsInProgress,
           total: mediaFinishedPayload.count
         })
-      }
-    }
-    Logger.dev(`Loaded ${mediaFinishedPayload.items.length} of ${mediaFinishedPayload.count} items for "Listen/Read Again" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
 
-    if (library.isBook) {
-      start = Date.now()
-      // "Newest Authors" shelf
-      const newestAuthorsPayload = await libraryFilters.getNewestAuthors(library, user, limit)
-      if (newestAuthorsPayload.authors.length) {
-        shelves.push({
-          id: 'newest-authors',
-          label: 'Newest Authors',
-          labelStringKey: 'LabelNewestAuthors',
-          type: 'authors',
-          entities: newestAuthorsPayload.authors,
-          total: newestAuthorsPayload.count
-        })
+        // "Read Again" shelf
+        if (ebookOnlyItemsInProgress.length) {
+          result.push({
+            id: 'read-again',
+            label: 'Read Again',
+            labelStringKey: 'LabelReadAgain',
+            type: 'book',
+            entities: ebookOnlyItemsInProgress,
+            total: mediaFinishedPayload.count
+          })
+        }
       }
-      Logger.dev(`Loaded ${newestAuthorsPayload.authors.length} of ${newestAuthorsPayload.count} authors for "Newest Authors" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
+      Logger.info(`Loaded ${mediaFinishedPayload.items.length} of ${mediaFinishedPayload.count} items for "Listen/Read Again" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
+
+      return result;
+    })());
+    if (library.isBook) {
+      promises.push((async () => {
+        const start = Date.now()
+        const result = [];
+        // "Newest Authors" shelf
+        const newestAuthorsPayload = await libraryFilters.getNewestAuthors(library, user, limit)
+        if (newestAuthorsPayload.authors.length) {
+          result.push({
+            id: 'newest-authors',
+            label: 'Newest Authors',
+            labelStringKey: 'LabelNewestAuthors',
+            type: 'authors',
+            entities: newestAuthorsPayload.authors,
+            total: newestAuthorsPayload.count
+          })
+        }
+        Logger.info(`Loaded ${newestAuthorsPayload.authors.length} of ${newestAuthorsPayload.count} authors for "Newest Authors" in ${((Date.now() - start) / 1000).toFixed(2)}s`)
+        return result;
+      })());
+    }
+  
+    const results =  await Promise.all(promises);
+    
+    for (const resultArray of results) {
+      for (const result of resultArray) {
+        shelves.push(result);
+      }
     }
 
     Logger.debug(`Loaded ${shelves.length} personalized shelves in ${((Date.now() - fullStart) / 1000).toFixed(2)}s`)

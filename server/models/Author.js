@@ -149,6 +149,8 @@ class Author extends Model {
             collate: 'NOCASE'
           }]
         },
+        { fields: ['createdAt']
+        },
         // {
         //   fields: [{
         //     name: 'lastFirst',
