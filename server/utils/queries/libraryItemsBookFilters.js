@@ -548,8 +548,8 @@ module.exports = {
         bookAttributes.include.push([Sequelize.literal(`IFNULL((SELECT s.name FROM bookSeries AS bs, series AS s WHERE bs.seriesId = s.id AND bs.bookId = book.id AND bs.id IN (${bookSeriesToInclude.map(v => `"${v.id}"`).join(', ')})), \`book\`.\`title\`)`), 'display_title'])
       }
     }
-
-    const { rows: books, count } = await Database.bookModel.findAndCountAll({
+    
+    const requestObj = {
       where: bookWhere,
       distinct: true,
       attributes: bookAttributes,
@@ -569,7 +569,20 @@ module.exports = {
       subQuery: false,
       limit: limit || null,
       offset
-    })
+    };
+    
+    let books;
+    let count;
+
+    if (isHomePage) { //Counting all the matching items for the homepage slows down results, and isn't displayed.
+      const result = await Database.bookModel.findAll(requestObj)
+      books = result;
+      count = result.length;
+    } else {
+      const result = await Database.bookModel.findAndCountAll(requestObj)
+      books = result.rows;
+      count = result.count;
+    }
 
     const libraryItems = books.map((bookExpanded) => {
       const libraryItem = bookExpanded.libraryItem.toJSON()
@@ -632,7 +645,7 @@ module.exports = {
    * @param {number} offset 
    * @returns {object} { libraryItems:LibraryItem[], count:number }
    */
-  async getContinueSeriesLibraryItems(libraryId, user, include, limit, offset) {
+  async getContinueSeriesLibraryItems(libraryId, user, include, limit, offset, isHomePage = false) {
     const libraryItemIncludes = []
     if (include.includes('rssfeed')) {
       libraryItemIncludes.push({
@@ -646,7 +659,7 @@ module.exports = {
     const userPermissionBookWhere = this.getUserPermissionBookWhereQuery(user)
     bookWhere.push(...userPermissionBookWhere.bookWhere)
 
-    const { rows: series, count } = await Database.seriesModel.findAndCountAll({
+    const query = {
       where: [
         {
           id: {
@@ -719,7 +732,9 @@ module.exports = {
       subQuery: false,
       limit,
       offset
-    })
+    };
+    
+    const { rows: series, count } = isHomePage ? await Database.seriesModel.findAll(query).then(r => ({ rows: r, count: r.length })) : await Database.seriesModel.findAndCountAll(query);
 
     const libraryItems = series.map(s => {
       if (!s.bookSeries.length) return null // this is only possible if user has restricted books in series
@@ -754,7 +769,7 @@ module.exports = {
    * @param {number} limit 
    * @returns {object} {libraryItems:LibraryItem, count:number}
    */
-  async getDiscoverLibraryItems(libraryId, user, include, limit) {
+  async getDiscoverLibraryItems(libraryId, user, include, limit, isHomePage = false) {
     const userPermissionBookWhere = this.getUserPermissionBookWhereQuery(user)
 
     // Step 1: Get the first book of every series that hasnt been started yet
@@ -798,9 +813,8 @@ module.exports = {
         model: Database.feedModel
       })
     }
-
-    // Step 2: Get books not started and not in a series OR is the first book of a series not started (ordered randomly)
-    const { rows: books, count } = await Database.bookModel.findAndCountAll({
+    
+    const query = {
       where: [
         {
           '$mediaProgresses.isFinished$': {
@@ -857,7 +871,10 @@ module.exports = {
       distinct: true,
       limit,
       order: Database.sequelize.random()
-    })
+    };
+
+    // Step 2: Get books not started and not in a series OR is the first book of a series not started (ordered randomly)
+    const { rows: books, count } = isHomePage ?  await Database.bookModel.findAll(query).then(r => ({ rows: r, count: r.length })) : await Database.bookModel.findAndCountAll(query)
 
     // Step 3: Map books to library items
     const libraryItems = books.map((bookExpanded) => {

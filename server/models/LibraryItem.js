@@ -592,7 +592,7 @@ class LibraryItem extends Model {
         get: async () => {
           const start = Date.now()
           const result = [];
-          const continueSeriesPayload = await libraryFilters.getLibraryItemsContinueSeries(library, user, include, limit)
+          const continueSeriesPayload = await libraryFilters.getLibraryItemsContinueSeries(library, user, include, limit, true)
           if (continueSeriesPayload.libraryItems.length) {
             result.push({
               id: 'continue-series',
@@ -612,7 +612,7 @@ class LibraryItem extends Model {
           get: async () => {
             const start = Date.now()
             const result = [];
-          const newestEpisodesPayload = await libraryFilters.getNewestPodcastEpisodes(library, user, limit)
+          const newestEpisodesPayload = await libraryFilters.getNewestPodcastEpisodes(library, user, limit, true)
           if (newestEpisodesPayload.libraryItems.length) {
             result.push({
               id: 'newest-episodes',
@@ -633,7 +633,7 @@ class LibraryItem extends Model {
           const start = Date.now()
           const result = [];
           // "Recently Added" shelf
-          const mostRecentPayload = await libraryFilters.getLibraryItemsMostRecentlyAdded(library, user, include, limit)
+          const mostRecentPayload = await libraryFilters.getLibraryItemsMostRecentlyAdded(library, user, include, limit, true)
           if (mostRecentPayload.libraryItems.length) {
             result.push({
               id: 'recently-added',
@@ -654,7 +654,7 @@ class LibraryItem extends Model {
           const start = Date.now()
           const result = [];
           // "Recent Series" shelf
-          const seriesMostRecentPayload = await libraryFilters.getSeriesMostRecentlyAdded(library, user, include, limit)
+          const seriesMostRecentPayload = await libraryFilters.getSeriesMostRecentlyAdded(library, user, include, limit, true)
           if (seriesMostRecentPayload.series.length) {
             result.push({
               id: 'recent-series',
@@ -675,7 +675,7 @@ class LibraryItem extends Model {
           const start = Date.now()
           const result = [];
           // "Discover" shelf
-          const discoverLibraryItemsPayload = await libraryFilters.getLibraryItemsToDiscover(library, user, include, limit)
+          const discoverLibraryItemsPayload = await libraryFilters.getLibraryItemsToDiscover(library, user, include, limit, true)
           if (discoverLibraryItemsPayload.libraryItems.length) {
             result.push({
               id: 'discover',
@@ -696,7 +696,7 @@ class LibraryItem extends Model {
           const start = Date.now()
           const result = [];
           // "Listen Again" shelf
-          const mediaFinishedPayload = await libraryFilters.getMediaFinished(library, user, include, limit)
+          const mediaFinishedPayload = await libraryFilters.getMediaFinished(library, user, include, limit, true)
           if (mediaFinishedPayload.items.length) {
             const ebookOnlyItemsInProgress = mediaFinishedPayload.items.filter(li => li.media.isEBookOnly)
             const audioOnlyItemsInProgress = mediaFinishedPayload.items.filter(li => !li.media.isEBookOnly)
@@ -733,7 +733,7 @@ class LibraryItem extends Model {
           const start = Date.now()
           const result = [];
           // "Listen Again" shelf
-          const mediaFinishedPayload = await libraryFilters.getMediaFinished(library, user, include, limit)
+          const mediaFinishedPayload = await libraryFilters.getMediaFinished(library, user, include, limit, true)
           const audioOnlyItemsInProgress = mediaFinishedPayload.items.filter(li => !li.media.isEBookOnly)
           if (audioOnlyItemsInProgress.length) {
             result.push({
@@ -755,7 +755,7 @@ class LibraryItem extends Model {
           const start = Date.now()
           const result = [];
           // "Listen Again" shelf
-          const mediaFinishedPayload = await libraryFilters.getMediaFinished(library, user, include, limit)
+          const mediaFinishedPayload = await libraryFilters.getMediaFinished(library, user, include, limit, true)
           const ebookOnlyItemsInProgress = mediaFinishedPayload.items.filter(li => li.media.isEBookOnly)
           if (ebookOnlyItemsInProgress.length) {
             result.push({
@@ -777,7 +777,7 @@ class LibraryItem extends Model {
           const start = Date.now()
           const result = [];
           // "Newest Authors" shelf
-          const newestAuthorsPayload = await libraryFilters.getNewestAuthors(library, user, limit)
+          const newestAuthorsPayload = await libraryFilters.getNewestAuthors(library, user, limit, true)
           if (newestAuthorsPayload.authors.length) {
             result.push({
               id: 'newest-authors',

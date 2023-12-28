@@ -262,7 +262,7 @@ module.exports = {
 
     const userPermissionPodcastWhere = this.getUserPermissionPodcastWhereQuery(user)
 
-    const { rows: podcastEpisodes, count } = await Database.podcastEpisodeModel.findAndCountAll({
+    const query = {
       where: podcastEpisodeWhere,
       replacements: userPermissionPodcastWhere.replacements,
       include: [
@@ -283,7 +283,11 @@ module.exports = {
       order: podcastEpisodeOrder,
       limit,
       offset
-    })
+    };
+    
+    const { rows: podcastEpisodes, count } = isHomePage ? 
+      await Database.podcastEpisodeModel.findAll(query).then(result => ({ rows: result, count: result.length })) :
+      await Database.podcastEpisodeModel.findAndCountAll(query).then(result => result);
 
     const libraryItems = podcastEpisodes.map((ep) => {
       const libraryItem = ep.podcast.libraryItem.toJSON()

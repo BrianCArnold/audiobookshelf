@@ -81,9 +81,9 @@ module.exports = {
    * @param {number} limit 
    * @returns {object} { libraryItems:LibraryItem[], count:number }
    */
-  async getLibraryItemsMostRecentlyAdded(library, user, include, limit) {
+  async getLibraryItemsMostRecentlyAdded(library, user, include, limit, isHomePage = false) {
     if (library.mediaType === 'book') {
-      const { libraryItems, count } = await libraryItemsBookFilters.getFilteredLibraryItems(library.id, user, 'recent', null, 'addedAt', true, false, include, limit, 0)
+      const { libraryItems, count } = await libraryItemsBookFilters.getFilteredLibraryItems(library.id, user, 'recent', null, 'addedAt', true, false, include, limit, 0, isHomePage)
       return {
         libraryItems: libraryItems.map(li => {
           const oldLibraryItem = Database.libraryItemModel.getOldLibraryItem(li).toJSONMinified()
@@ -98,7 +98,7 @@ module.exports = {
         count
       }
     } else {
-      const { libraryItems, count } = await libraryItemsPodcastFilters.getFilteredLibraryItems(library.id, user, 'recent', null, 'addedAt', true, include, limit, 0)
+      const { libraryItems, count } = await libraryItemsPodcastFilters.getFilteredLibraryItems(library.id, user, 'recent', null, 'addedAt', true, include, limit, 0, isHomePage)
       return {
         libraryItems: libraryItems.map(li => {
           const oldLibraryItem = Database.libraryItemModel.getOldLibraryItem(li).toJSONMinified()
@@ -126,8 +126,8 @@ module.exports = {
    * @param {number} limit 
    * @returns {object} { libraryItems:LibraryItem[], count:number }
    */
-  async getLibraryItemsContinueSeries(library, user, include, limit) {
-    const { libraryItems, count } = await libraryItemsBookFilters.getContinueSeriesLibraryItems(library.id, user, include, limit, 0)
+  async getLibraryItemsContinueSeries(library, user, include, limit, isHomePage = false) {
+    const { libraryItems, count } = await libraryItemsBookFilters.getContinueSeriesLibraryItems(library.id, user, include, limit, 0, isHomePage)
     return {
       libraryItems: libraryItems.map(li => {
         const oldLibraryItem = Database.libraryItemModel.getOldLibraryItem(li).toJSONMinified()
@@ -151,9 +151,9 @@ module.exports = {
    * @param {number} limit 
    * @returns {object} { items:object[], count:number }
    */
-  async getMediaFinished(library, user, include, limit) {
+  async getMediaFinished(library, user, include, limit, isHomePage = false) {
     if (library.mediaType === 'book') {
-      const { libraryItems, count } = await libraryItemsBookFilters.getFilteredLibraryItems(library.id, user, 'progress', 'finished', 'progress', true, false, include, limit, 0)
+      const { libraryItems, count } = await libraryItemsBookFilters.getFilteredLibraryItems(library.id, user, 'progress', 'finished', 'progress', true, false, include, limit, 0, isHomePage)
       return {
         items: libraryItems.map(li => {
           const oldLibraryItem = Database.libraryItemModel.getOldLibraryItem(li).toJSONMinified()
@@ -165,7 +165,7 @@ module.exports = {
         count
       }
     } else {
-      const { libraryItems, count } = await libraryItemsPodcastFilters.getFilteredPodcastEpisodes(library.id, user, 'progress', 'finished', 'progress', true, limit, 0)
+      const { libraryItems, count } = await libraryItemsPodcastFilters.getFilteredPodcastEpisodes(library.id, user, 'progress', 'finished', 'progress', true, limit, 0, isHomePage)
       return {
         count,
         items: libraryItems.map(li => {
@@ -185,7 +185,7 @@ module.exports = {
    * @param {number} limit 
    * @returns {{ series:import('../../objects/entities/Series')[], count:number}} 
    */
-  async getSeriesMostRecentlyAdded(library, user, include, limit) {
+  async getSeriesMostRecentlyAdded(library, user, include, limit, isHomePage = false) {
     if (!library.isBook) return { series: [], count: 0 }
 
     const seriesIncludes = []
@@ -233,7 +233,7 @@ module.exports = {
       }))
     }
 
-    const { rows: series, count } = await Database.seriesModel.findAndCountAll({
+    const query = {
       where: seriesWhere,
       limit,
       offset: 0,
@@ -257,7 +257,9 @@ module.exports = {
       order: [
         ['createdAt', 'DESC']
       ]
-    })
+    };
+    
+    const { rows: series, count } = isHomePage ?  await Database.seriesModel.findAll(query).then(r => ({ rows: r, count: r.length }))  : await Database.seriesModel.findAndCountAll(query)
 
     const allOldSeries = []
     for (const s of series) {
@@ -305,12 +307,12 @@ module.exports = {
    * @param {number} limit 
    * @returns {object} { authors:oldAuthor[], count:number }
    */
-  async getNewestAuthors(library, user, limit) {
+  async getNewestAuthors(library, user, limit, isHomePage = false) {
     if (library.mediaType !== 'book') return { authors: [], count: 0 }
 
     const { bookWhere, replacements } = libraryItemsBookFilters.getUserPermissionBookWhereQuery(user)
 
-    const { rows: authors, count } = await Database.authorModel.findAndCountAll({
+    const query = {
       where: {
         libraryId: library.id,
         createdAt: {
@@ -332,7 +334,9 @@ module.exports = {
       order: [
         ['createdAt', 'DESC']
       ]
-    })
+    };
+    
+    const { rows: authors, count } = isHomePage ?  await Database.authorModel.findAll(query).then(r => ({ rows: r, count: r.length })) : await Database.authorModel.findAndCountAll(query)
 
     return {
       authors: authors.map((au) => {
@@ -351,10 +355,10 @@ module.exports = {
    * @param {number} limit 
    * @returns {object} {libraryItems:oldLibraryItem[], count:number}
    */
-  async getLibraryItemsToDiscover(library, user, include, limit) {
+  async getLibraryItemsToDiscover(library, user, include, limit, isHomePage = false) {
     if (library.mediaType !== 'book') return { libraryItems: [], count: 0 }
 
-    const { libraryItems, count } = await libraryItemsBookFilters.getDiscoverLibraryItems(library.id, user, include, limit)
+    const { libraryItems, count } = await libraryItemsBookFilters.getDiscoverLibraryItems(library.id, user, include, limit, isHomePage)
     return {
       libraryItems: libraryItems.map(li => {
         const oldLibraryItem = Database.libraryItemModel.getOldLibraryItem(li).toJSONMinified()
@@ -374,10 +378,10 @@ module.exports = {
    * @param {number} limit 
    * @returns {object} {libraryItems:oldLibraryItem[], count:number}
    */
-  async getNewestPodcastEpisodes(library, user, limit) {
+  async getNewestPodcastEpisodes(library, user, limit, isHomePage = false) {
     if (library.mediaType !== 'podcast') return { libraryItems: [], count: 0 }
 
-    const { libraryItems, count } = await libraryItemsPodcastFilters.getFilteredPodcastEpisodes(library.id, user, 'recent', null, 'createdAt', true, limit, 0)
+    const { libraryItems, count } = await libraryItemsPodcastFilters.getFilteredPodcastEpisodes(library.id, user, 'recent', null, 'createdAt', true, limit, 0, isHomePage)
     return {
       count,
       libraryItems: libraryItems.map(li => {
