@@ -146,6 +146,9 @@ class Series extends Model {
         // },
         {
           fields: ['libraryId']
+        },
+        {
+          fields: ['createdAt']
         }
       ]
     })

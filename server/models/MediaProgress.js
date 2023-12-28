@@ -129,6 +129,9 @@ class MediaProgress extends Model {
       indexes: [
         {
           fields: ['updatedAt']
+        },
+        {
+          fields: ['isFinished', 'currentTime']
         }
       ]
     })

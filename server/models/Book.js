@@ -291,6 +291,9 @@ class Book extends Model {
         // {
         //   fields: ['duration']
         // }
+        {
+          fields: ['createdAt']
+        }
       ]
     })
   }
