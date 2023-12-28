@@ -501,7 +501,8 @@ class LibraryController {
   async getUserPersonalizedShelves(req, res) {
     const limitPerShelf = req.query.limit && !isNaN(req.query.limit) ? Number(req.query.limit) || 10 : 10
     const include = (req.query.include || '').split(',').map(v => v.trim().toLowerCase()).filter(v => !!v)
-    const shelves = await Database.libraryItemModel.getPersonalizedShelves(req.library, req.user, include, limitPerShelf)
+    const shelvesRequested = req.query.shelves ? req.query.shelves.split(',').map(v => v.trim().toLowerCase()).filter(v => !!v) : null
+    const shelves = await Database.libraryItemModel.getPersonalizedShelves(req.library, req.user, include, limitPerShelf, shelvesRequested)
     res.json(shelves)
   }
 
