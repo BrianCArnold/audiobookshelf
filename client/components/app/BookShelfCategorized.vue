@@ -325,6 +325,8 @@ export default {
             .catch((error) => {
               console.error("Failed to fetch categories", error);
             }))
+        //This makes sure that the server has time to finish each separate query.
+        await new Promise(res => setTimeout(res, 500));
       }
       await Promise.all(categoryPromises);
       renderCategories()
